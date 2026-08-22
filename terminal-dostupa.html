@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ТЕРМИНАЛ ДОСТУПА № 07 — Управление Персонала</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+<!--
+  ПРИМЕЧАНИЕ ДЛЯ ИГРОКОВ, ДОШЕДШИХ ДО ЭТОГО МЕСТА:
+  Всякий, кто заглядывает под обшивку терминала, уже прошёл первую проверку на пригодность.
+  Пароль этого узла — не то, что ищут снаружи. Он то, что произносят, когда узнают голос.
+  Подсказка: семь букв, одно слово, оно уже звучало в отчёте о Кассете-07.
+-->
+
+<style>
+  :root{
+    --bg-void:#0b0b0d;
+    --bg-panel:#131311;
+    --bg-panel-2:#17170f;
+    --line:#3a3a30;
+    --text:#c9c2ae;
+    --text-dim:#6b665a;
+    --blood:#7a1f1f;
+    --blood-bright:#b23a3a;
+    --phosphor:#5a7048;
+    --phosphor-bright:#8fae6e;
+    --warn:#a8791f;
+    --static:#e8e4d8;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg-void);
+    color:var(--text);
+    font-family:'Space Mono',monospace;
+    overflow:hidden;
+  }
+
+  /* ---------- ambient noise + scanlines ---------- */
+  #noise-canvas{
+    position:fixed;inset:0;width:100%;height:100%;
+    pointer-events:none;
+    opacity:0.05;
+    z-index:5;
+    mix-blend-mode:overlay;
+  }
+  .scanlines{
+    position:fixed;inset:0;z-index:6;pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.18) 3px,
+      rgba(0,0,0,0) 4px
+    );
+  }
+  .vignette{
+    position:fixed;inset:0;z-index:4;pointer-events:none;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.75) 100%);
+  }
+  .flicker{animation:flicker 6s infinite;}
+  @keyframes flicker{
+    0%,100%{opacity:1;}
+    92%{opacity:1;}
+    93%{opacity:0.82;}
+    94%{opacity:1;}
+    95%{opacity:0.65;}
+    96%{opacity:1;}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .flicker{animation:none;}
+    #noise-canvas{display:none;}
+  }
+
+  /* ---------- gate screen ---------- */
+  #gate{
+    position:relative;z-index:2;
+    height:100%;
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+
+  .panel{
+    position:relative;
+    width:100%;max-width:460px;
+    background:linear-gradient(180deg,var(--bg-panel),var(--bg-panel-2));
+    border:1px solid var(--line);
+    padding:44px 38px 34px;
+  }
+  .panel::before,.panel::after,
+  .panel .corner-tl,.panel .corner-br{
+    content:"";position:absolute;width:14px;height:14px;
+    border-color:var(--phosphor);
+  }
+  .panel::before{top:-1px;left:-1px;border-top:1px solid var(--phosphor);border-left:1px solid var(--phosphor);}
+  .panel::after{bottom:-1px;right:-1px;border-bottom:1px solid var(--phosphor);border-right:1px solid var(--phosphor);}
+
+  .eyebrow{
+    font-size:11px;letter-spacing:0.28em;color:var(--text-dim);
+    text-transform:uppercase;text-align:center;margin-bottom:6px;
+  }
+  .seal{
+    font-family:'Cinzel',serif;font-weight:700;
+    font-size:26px;letter-spacing:0.06em;text-align:center;
+    color:var(--static);margin:0 0 4px;
+  }
+  .seal-sub{
+    font-size:11px;text-align:center;color:var(--phosphor-bright);
+    letter-spacing:0.18em;margin-bottom:28px;
+    text-transform:uppercase;
+  }
+
+  .field{margin-bottom:20px;}
+  .field label{
+    display:block;font-size:10px;letter-spacing:0.18em;
+    color:var(--text-dim);text-transform:uppercase;margin-bottom:7px;
+  }
+  .field input{
+    width:100%;background:#0e0e0c;border:1px solid var(--line);
+    color:var(--static);font-family:'Space Mono',monospace;
+    font-size:14px;padding:11px 12px;letter-spacing:0.06em;
+  }
+  .field input:focus{outline:none;border-color:var(--phosphor);}
+  .field input[disabled]{color:var(--text-dim);}
+
+  .field input::placeholder{color:#3d3b34;}
+
+  button#submit{
+    width:100%;margin-top:8px;
+    background:transparent;border:1px solid var(--blood);
+    color:var(--blood-bright);font-family:'Space Mono',monospace;
+    font-size:12px;letter-spacing:0.22em;text-transform:uppercase;
+    padding:13px;cursor:pointer;transition:background .15s, color .15s;
+  }
+  button#submit:hover{background:var(--blood);color:var(--static);}
+
+  .status-line{
+    margin-top:16px;min-height:16px;
+    font-size:11px;letter-spacing:0.08em;color:var(--warn);
+    text-align:center;
+  }
+
+  .footnote{
+    margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+    font-size:10px;line-height:1.7;color:var(--text-dim);
+    letter-spacing:0.02em;
+  }
+
+  /* wrong password shake + glitch burst */
+  .shake{animation:shake .4s;}
+  @keyframes shake{
+    10%,90%{transform:translateX(-1px);}
+    20%,80%{transform:translateX(2px);}
+    30%,50%,70%{transform:translateX(-4px);}
+    40%,60%{transform:translateX(4px);}
+  }
+  #glitch-burst{
+    position:fixed;inset:0;z-index:20;pointer-events:none;
+    background:var(--static);opacity:0;
+  }
+  #glitch-burst.hit{animation:burst .18s steps(2);}
+  @keyframes burst{
+    0%{opacity:0;}
+    30%{opacity:0.9;}
+    60%{opacity:0;}
+    80%{opacity:0.4;}
+    100%{opacity:0;}
+  }
+  #deny-text{
+    position:fixed;inset:0;z-index:21;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;opacity:0;font-family:'Cinzel',serif;font-size:13vw;
+    color:var(--blood-bright);letter-spacing:0.05em;text-align:center;
+  }
+  #deny-text.show{animation:deny .5s ease-out;}
+  @keyframes deny{
+    0%{opacity:0;transform:scale(0.96);}
+    15%{opacity:1;transform:scale(1);}
+    70%{opacity:1;}
+    100%{opacity:0;}
+  }
+
+  /* ---------- dossier (post-auth) ---------- */
+  #dossier{
+    display:none;position:relative;z-index:2;height:100%;overflow-y:auto;
+    padding:64px 20px 100px;
+  }
+  #dossier.show{display:block;}
+  .doc{
+    max-width:680px;margin:0 auto;
+    border-left:1px solid var(--blood);
+    padding-left:28px;
+  }
+  .doc .tag{
+    display:inline-block;font-size:10px;letter-spacing:0.2em;
+    color:var(--blood-bright);border:1px solid var(--blood);
+    padding:3px 8px;text-transform:uppercase;margin-bottom:18px;
+  }
+  .doc h1{
+    font-family:'Cinzel',serif;font-weight:700;color:var(--static);
+    font-size:28px;line-height:1.3;margin:0 0 6px;
+  }
+  .doc .meta{
+    font-size:11px;color:var(--text-dim);letter-spacing:0.1em;
+    margin-bottom:36px;
+  }
+  .doc p{font-size:14px;line-height:1.9;color:var(--text);margin:0 0 20px;}
+  .doc .redacted{
+    background:var(--static);color:var(--static);user-select:none;
+    padding:0 3px;
+  }
+  .doc .terminal-note{
+    background:#0e0e0c;border:1px solid var(--line);padding:16px 18px;
+    font-size:12.5px;line-height:1.8;color:var(--phosphor-bright);
+    margin:28px 0;white-space:pre-wrap;
+  }
+  .countdown-box{
+    margin-top:44px;padding:20px;border:1px solid var(--warn);
+    text-align:center;
+  }
+  .countdown-box .cd-label{
+    font-size:10px;letter-spacing:0.2em;color:var(--warn);
+    text-transform:uppercase;margin-bottom:10px;
+  }
+  .countdown-box .cd-clock{
+    font-family:'Space Mono',monospace;font-size:26px;letter-spacing:0.05em;
+    color:var(--static);
+  }
+  .logout{
+    display:inline-block;margin-top:40px;font-size:11px;
+    color:var(--text-dim);letter-spacing:0.1em;cursor:pointer;
+    border-bottom:1px dotted var(--text-dim);
+  }
+  .logout:hover{color:var(--text);}
+</style>
+</head>
+<body>
+
+<canvas id="noise-canvas"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div id="glitch-burst"></div>
+<div id="deny-text">ДОСТУП<br>ЗАПРЕЩЁН</div>
+
+<!-- ============ GATE ============ -->
+<section id="gate">
+  <div class="panel flicker" id="panel">
+    <div class="eyebrow">Лобораторная Корпорация · Форма C-07</div>
+    <div class="seal">ТЕРМИНАЛ ДОСТУПА</div>
+    <div class="seal-sub">Управление Персонала — Узел № 07</div>
+
+    <div class="field">
+      <label for="empId">Идентификатор сотрудника</label>
+      <input id="empId" type="text" value="XXXX-000-Ω" disabled>
+    </div>
+
+    <div class="field">
+      <label for="pw">Кодовое слово</label>
+      <input id="pw" type="password" placeholder="введите слово" autocomplete="off">
+    </div>
+
+    <button id="submit">Подтвердить личность</button>
+    <div class="status-line" id="statusLine"></div>
+
+    <div class="footnote">
+      Несоответствие кодового слова фиксируется и передаётся в архив.<br>
+      Три ошибки подряд инициируют протокол изъятия записи о посетителе.
+    </div>
+  </div>
+</section>
+
+<!-- ============ DOSSIER ============ -->
+<section id="dossier">
+  <div class="doc">
+    <span class="tag">Рассекречено — Форма C-07 / Кассета-07</span>
+    <h1>Отчёт о происшествии: неучтённая запись</h1>
+    <div class="meta">Составлено Управлением Персонала · копия для узла посетителя</div>
+
+    <p>Запись поступила без источника. На плёнке — двенадцать статичных кадров и один звук, не поддающийся классификации ни как речь, ни как сигнал оборудования. Просмотревшие описывают одно и то же ощущение: будто их <span class="redacted">████████████</span> зафиксировали в отчёте прежде, чем они успели о себе заявить.</p>
+
+    <p>Стандартный протокол требует уничтожения любого носителя с неизвестным источником в течение суток. Носитель Кассета-07 не был уничтожен. Причина в акте не указана.</p>
+
+    <div class="terminal-note">> ЗАПРОС: местоположение оригинала
+> ОТВЕТ: Библиотека Руины, стеллаж без номера
+> ЗАПРОС: статус наблюдателя
+> ОТВЕТ: наблюдатель наблюдаем
+> [СОЕДИНЕНИЕ ПРЕРВАНО ИЗВНЕ]</div>
+
+    <p>Всякий, кто досматривает запись до конца, получает вызов с номера, отсутствующего в реестре Города. Голос на линии зачитывает фрагмент отчёта — всегда следующий по счёту, всегда на один абзац дальше того, что уже прочли. У досмотревшего есть семь дней, чтобы явиться на собеседование по форме C-07. Явка не была подтверждена ни разу.</p>
+
+    <p>Данный узел — точка приёма для тех, кто уже прошёл кадры один-двенадцать. Дальнейшие инструкции будут переданы отдельно, вне этого терминала.</p>
+
+    <div class="countdown-box">
+      <div class="cd-label">До истечения срока явки</div>
+      <div class="cd-clock" id="clock">7д 00:00:00</div>
+    </div>
+
+    <div class="logout" id="logoutBtn">‹ завершить сеанс и вернуться к форме</div>
+  </div>
+</section>
+
+<script>
+  // ---- ambient static noise on canvas ----
+  const canvas = document.getElementById('noise-canvas');
+  const ctx = canvas.getContext('2d');
+  function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  function drawNoise(){
+    const w = canvas.width, h = canvas.height;
+    const imgData = ctx.createImageData(w, h);
+    const buffer = new Uint32Array(imgData.data.buffer);
+    for (let i = 0; i < buffer.length; i++){
+      const v = (Math.random() * 255) | 0;
+      buffer[i] = (255 << 24) | (v << 16) | (v << 8) | v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+  let noiseFrame = 0;
+  function noiseLoop(){
+    noiseFrame++;
+    if (noiseFrame % 3 === 0) drawNoise(); // throttle for perf
+    requestAnimationFrame(noiseLoop);
+  }
+  noiseLoop();
+
+  // ---- password gate ----
+  // Пароль-по-умолчанию для этого билда: OBSERVED (без учёта регистра).
+  // Замени PASSWORD ниже на своё кодовое слово перед запуском ARG.
+  const PASSWORD = "OBSERVED";
+  let attempts = 0;
+
+  const pwInput = document.getElementById('pw');
+  const panel = document.getElementById('panel');
+  const statusLine = document.getElementById('statusLine');
+  const glitchBurst = document.getElementById('glitch-burst');
+  const denyText = document.getElementById('deny-text');
+  const gate = document.getElementById('gate');
+  const dossier = document.getElementById('dossier');
+
+  function tryUnlock(){
+    const val = pwInput.value.trim().toUpperCase();
+    if (val.length === 0) return;
+
+    if (val === PASSWORD){
+      revealDossier();
+    } else {
+      attempts++;
+      panel.classList.remove('shake'); void panel.offsetWidth; panel.classList.add('shake');
+      glitchBurst.classList.remove('hit'); void glitchBurst.offsetWidth; glitchBurst.classList.add('hit');
+      denyText.classList.remove('show'); void denyText.offsetWidth; denyText.classList.add('show');
+      statusLine.textContent = attempts >= 3
+        ? "ТРЕТЬЕ НЕСООТВЕТСТВИЕ. ПОПЫТКА ЗАФИКСИРОВАНА."
+        : "КОДОВОЕ СЛОВО НЕ ПРИНЯТО.";
+      pwInput.value = "";
+    }
+  }
+
+  document.getElementById('submit').addEventListener('click', tryUnlock);
+  pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
+  function revealDossier(){
+    gate.style.display = 'none';
+    dossier.classList.add('show');
+    startCountdown();
+  }
+
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    dossier.classList.remove('show');
+    gate.style.display = 'flex';
+    pwInput.value = "";
+  });
+
+  // ---- 7-day countdown from first unlock (persists via sessionStorage) ----
+  function startCountdown(){
+    const key = 'c07_deadline';
+    let deadline = sessionStorage.getItem(key);
+    if (!deadline){
+      deadline = Date.now() + 7*24*60*60*1000;
+      sessionStorage.setItem(key, deadline);
+    }
+    deadline = parseInt(deadline, 10);
+
+    const clockEl = document.getElementById('clock');
+    function tick(){
+      const remain = Math.max(0, deadline - Date.now());
+      const d = Math.floor(remain / 86400000);
+      const h = Math.floor((remain % 86400000) / 3600000);
+      const m = Math.floor((remain % 3600000) / 60000);
+      const s = Math.floor((remain % 60000) / 1000);
+      clockEl.textContent = `${d}д ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      if (remain <= 0) clockEl.textContent = "СРОК ИСТЁК";
+    }
+    tick();
+    setInterval(tick, 1000);
+  }
+</script>
+
+</body>
+</html>
